@@ -18,10 +18,16 @@ const allowedOrigins = [
   'http://localhost:5173', // Development
   process.env.CLIENT_URL, // Production
 ];
-app.use(cors({
-  origin: allowedOrigins.filter(Boolean), // Filters out undefined
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: allowedOrigins.filter(Boolean), // Filters out undefined
+    credentials: true,
+    // Allow custom auth header used by frontend
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
+    // Expose headers back to the browser if needed
+    exposedHeaders: ['x-auth-token'],
+  })
+);
 
 app.use(express.json());
 
