@@ -3,46 +3,36 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 const otpGenerator = require('otp-generator');
+const { Resend } = require('resend'); // ✅ Import Resend
 const User = require('../models/User');
-const Otp = require('../models/Otp'); // Ensure this model exists!
+const Otp = require('../models/Otp');
 const auth = require('../middleware/auth');
 
-// Email transporter (Production Ready)
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,       // Explicitly use the secure SMTP port
-  secure: true,    // true for port 465
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false // Helps prevent SSL connection hangs on cloud servers
-  }
-});
+// ✅ Initialize Resend with your API Key
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Send OTP email with Error Handling to prevent timeouts
+// ✅ Send OTP email using Resend API (Bypasses Render SMTP blocks)
 const sendOtpEmail = async (email, otp) => {
   try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
+    const data = await resend.emails.send({
+      from: 'FuzzAds <onboarding@resend.dev>', // Resend's required testing email address
+      to: email, // Remember: Must be your verified Resend email address while testing
       subject: 'FuzzAds - OTP Verification',
-      text: `Your OTP is: ${otp}\nValid for 5 minutes.`,
       html: `
-        <h2>FuzzAds Verification</h2>
-        <p>Your OTP code is:</p>
-        <h1 style="letter-spacing: 10px; color: #2563eb;">${otp}</h1>
-        <p>This OTP expires in 5 minutes.</p>
-        <p>If you didn't request this, ignore this email.</p>
+        <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
+          <h2>FuzzAds Verification</h2>
+          <p>Your OTP code is:</p>
+          <h1 style="letter-spacing: 10px; color: #2563eb; background: #f3f4f6; padding: 15px; border-radius: 8px; display: inline-block;">${otp}</h1>
+          <p>This OTP expires in 5 minutes.</p>
+          <p style="color: #666; font-size: 12px; mt-4;">If you didn't request this, please ignore this email.</p>
+        </div>
       `,
     });
-    console.log(`✅ OTP Email successfully sent to ${email}`);
+    console.log(`✅ OTP Email successfully sent to ${email} via Resend`, data);
   } catch (error) {
-    console.error('❌ Nodemailer Error:', error.message);
-    throw new Error('Failed to send email. Check EMAIL_PASS and App Passwords.');
+    console.error('❌ Resend Error:', error);
+    throw new Error('Failed to send email via API.');
   }
 };
 
@@ -76,7 +66,7 @@ router.post('/register', async (req, res) => {
 
     await Otp.create({ email, otp });
     
-    // If this fails, it jumps to catch block instead of freezing
+    // Trigger Resend
     await sendOtpEmail(email, otp); 
 
     res.json({
@@ -120,8 +110,6 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ msg: 'Please verify your email first' });
     }
 
-    // FIX: Check if user registered via Google (has a randomized long password)
-    // and prevent them from using traditional login if they don't know it.
     if (!user.password) {
        return res.status(400).json({ msg: 'Please login using Google' });
     }
