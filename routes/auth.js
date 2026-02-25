@@ -9,13 +9,18 @@ const User = require('../models/User');
 const Otp = require('../models/Otp'); // Ensure this model exists!
 const auth = require('../middleware/auth');
 
-// Email transporter
+// Email transporter (Production Ready)
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,       // Explicitly use the secure SMTP port
+  secure: true,    // true for port 465
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // MUST BE A 16-DIGIT GOOGLE APP PASSWORD
+    pass: process.env.EMAIL_PASS,
   },
+  tls: {
+    rejectUnauthorized: false // Helps prevent SSL connection hangs on cloud servers
+  }
 });
 
 // Send OTP email with Error Handling to prevent timeouts
