@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const otpGenerator = require('otp-generator');
 const User = require('../models/User');
-const Otp = require('../models/Otp');
+const Otp = require('../models/Otp'); // Ensure this model exists!
 const auth = require('../middleware/auth');
 
 // Email transporter
@@ -14,25 +14,31 @@ const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    pass: process.env.EMAIL_PASS, // MUST BE A 16-DIGIT GOOGLE APP PASSWORD
   },
 });
 
-// Send OTP email
+// Send OTP email with Error Handling to prevent timeouts
 const sendOtpEmail = async (email, otp) => {
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'FuzzAds - OTP Verification',
-    text: `Your OTP is: ${otp}\nValid for 5 minutes.`,
-    html: `
-      <h2>FuzzAds Verification</h2>
-      <p>Your OTP code is:</p>
-      <h1 style="letter-spacing: 10px; color: #2563eb;">${otp}</h1>
-      <p>This OTP expires in 5 minutes.</p>
-      <p>If you didn't request this, ignore this email.</p>
-    `,
-  });
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'FuzzAds - OTP Verification',
+      text: `Your OTP is: ${otp}\nValid for 5 minutes.`,
+      html: `
+        <h2>FuzzAds Verification</h2>
+        <p>Your OTP code is:</p>
+        <h1 style="letter-spacing: 10px; color: #2563eb;">${otp}</h1>
+        <p>This OTP expires in 5 minutes.</p>
+        <p>If you didn't request this, ignore this email.</p>
+      `,
+    });
+    console.log(`✅ OTP Email successfully sent to ${email}`);
+  } catch (error) {
+    console.error('❌ Nodemailer Error:', error.message);
+    throw new Error('Failed to send email. Check EMAIL_PASS and App Passwords.');
+  }
 };
 
 // REGISTER
@@ -64,15 +70,17 @@ router.post('/register', async (req, res) => {
     });
 
     await Otp.create({ email, otp });
-    await sendOtpEmail(email, otp);
+    
+    // If this fails, it jumps to catch block instead of freezing
+    await sendOtpEmail(email, otp); 
 
     res.json({
       msg: 'Registration successful. Check your email for OTP to verify.',
       email,
     });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ msg: 'Server error' });
+    console.error('Registration Route Error:', err.message);
+    res.status(500).json({ msg: 'Server error while registering or sending email' });
   }
 });
 
@@ -105,6 +113,12 @@ router.post('/login', async (req, res) => {
 
     if (!user.isVerified) {
       return res.status(403).json({ msg: 'Please verify your email first' });
+    }
+
+    // FIX: Check if user registered via Google (has a randomized long password)
+    // and prevent them from using traditional login if they don't know it.
+    if (!user.password) {
+       return res.status(400).json({ msg: 'Please login using Google' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
