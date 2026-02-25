@@ -32,6 +32,10 @@ app.use(
 app.use(express.json());
 
 // Session middleware - required for Passport + Google OAuth
+// 1. MUST ADD THIS BEFORE YOUR SESSION MIDDLEWARE
+app.set('trust proxy', 1); // Trust Render's reverse proxy
+
+// 2. Update your session cookie settings
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'fallback-secret-do-not-use-in-prod',
@@ -41,7 +45,8 @@ app.use(
       secure: process.env.NODE_ENV === 'production', // true for https in production
       maxAge: 24 * 60 * 60 * 1000, // 1 day
       httpOnly: true,
-      sameSite: 'lax',
+      // 'none' is REQUIRED for cross-domain cookies (frontend on domain A, backend on domain B)
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', 
     },
   })
 );
